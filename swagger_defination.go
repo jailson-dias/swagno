@@ -8,13 +8,15 @@ type swaggerDefinition struct {
 
 // https://swagger.io/specification/v2/#schemaObject
 type swaggerDefinitionProperties struct {
-	Type   string                            `json:"type,omitempty"`
-	Format string                            `json:"format,omitempty"`
-	Ref    string                            `json:"$ref,omitempty"`
-	Items  *swaggerDefinitionPropertiesItems `json:"items,omitempty"`
+	Type    string                            `json:"type,omitempty"`
+	Format  string                            `json:"format,omitempty"`
+	Ref     string                            `json:"$ref,omitempty"`
+	Items   *swaggerDefinitionPropertiesItems `json:"items,omitempty"`
+	Example interface{}                       `json:"example,omitempty"`
 }
 
 type swaggerDefinitionPropertiesItems struct {
-	Type string `json:"type,omitempty"`
-	Ref  string `json:"$ref,omitempty"`
+	Type    string      `json:"type,omitempty"`
+	Ref     string      `json:"$ref,omitempty"`
+	Example interface{} `json:"example,omitempty"`
 }
