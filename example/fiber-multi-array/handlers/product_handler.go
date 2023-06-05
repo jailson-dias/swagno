@@ -1,9 +1,9 @@
 package handlers
 
 import (
-	. "github.com/go-swagno/swagno"
-	"github.com/go-swagno/swagno/example/fiber/models"
 	"github.com/gofiber/fiber/v2"
+	. "github.com/jailson-dias/swagno"
+	"github.com/jailson-dias/swagno/example/fiber/models"
 )
 
 type ProductHandler struct {

@@ -3,10 +3,10 @@ package main
 import (
 	"fmt"
 
-	swagno "github.com/go-swagno/swagno"
 	"github.com/go-swagno/swagno-fiber/swagger"
-	"github.com/go-swagno/swagno/example/fiber-multi-array/handlers"
 	"github.com/gofiber/fiber/v2"
+	swagno "github.com/jailson-dias/swagno"
+	"github.com/jailson-dias/swagno/example/fiber-multi-array/handlers"
 )
 
 func main() {

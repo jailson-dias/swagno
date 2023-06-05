@@ -7,7 +7,7 @@ You can declare your documentation details in code and get a json string to serv
 
 ## About the Project
 
-This project inspired by [Swaggo](https://github.com/swaggo/swag). Swaggo, uses annotations, exports files and needs to run by command. If you don't like this way, [Swag**no**](https://github.com/go-swagno/swagno) appears as a good alternative.
+This project inspired by [Swaggo](https://github.com/swaggo/swag). Swaggo, uses annotations, exports files and needs to run by command. If you don't like this way, [Swag**no**](https://github.com/jailson-dias/swagno) appears as a good alternative.
 
 ## Contents
 
@@ -33,18 +33,18 @@ This project inspired by [Swaggo](https://github.com/swaggo/swag). Swaggo, uses 
 1. Get swagno package in your project
 
 ```sh
-go get github.com/go-swagno/swagno
+go get github.com/jailson-dias/swagno
 ```
 
 2. Import swagno (We suggest "." import)
 
 ```go
 import (
-  . "github.com/go-swagno/swagno"
+  . "github.com/jailson-dias/swagno"
 )
 ```
 
-You can import without explicit period (.) like this: `import "github.com/go-swagno/swagno"` but then you have to add `swagno.` to functions, structs etc. ( `[]swagno.Endpoint` , `swagno.EndPoint` , `swagno.Params()` etc.)
+You can import without explicit period (.) like this: `import "github.com/jailson-dias/swagno"` but then you have to add `swagno.` to functions, structs etc. ( `[]swagno.Endpoint` , `swagno.EndPoint` , `swagno.Params()` etc.)
 
 3. Create your endpoints (check [Endpoints](#endpoints-api)). Example:
 
@@ -124,7 +124,7 @@ swagger.SwaggerHandler(a, sw.GenerateDocs(), swagger.Config{Prefix: "/swagger"})
 ...
 ```
 
-You can find a detailed example in [https://github.com/go-swagno/swagno/example/fiber](https://github.com/go-swagno/swagno/tree/master/example/fiber)
+You can find a detailed example in [https://github.com/jailson-dias/swagno/example/fiber](https://github.com/jailson-dias/swagno/tree/master/example/fiber)
 
 ## How to use with Gin
 
@@ -153,7 +153,7 @@ a.GET("/swagger/*any", swagger.SwaggerHandler(sw.GenerateDocs()))
 ...
 ```
 
-You can find a detailed example in [https://github.com/go-swagno/swagno/example/gin](https://github.com/go-swagno/swagno/tree/master/example/gin)
+You can find a detailed example in [https://github.com/jailson-dias/swagno/example/gin](https://github.com/jailson-dias/swagno/tree/master/example/gin)
 
 ## Implementation Status
 

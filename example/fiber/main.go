@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 
-	"github.com/go-swagno/swagno/example/fiber/handlers"
 	"github.com/gofiber/fiber/v2"
+	"github.com/jailson-dias/swagno/example/fiber/handlers"
 )
 
 func main() {

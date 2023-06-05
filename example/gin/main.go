@@ -2,7 +2,7 @@ package main
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/go-swagno/swagno/example/gin/handlers"
+	"github.com/jailson-dias/swagno/example/gin/handlers"
 )
 
 func main() {

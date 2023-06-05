@@ -1,4 +1,4 @@
-module github.com/go-swagno/swagno
+module github.com/jailson-dias/swagno
 
 go 1.18
 
