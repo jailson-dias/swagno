@@ -1,0 +1,11 @@
+version: "3"
+
+services:
+  app:
+    image: golang:1.19-alpine
+    working_dir: /app/
+    entrypoint: go run ./example/${FRAMEWORK_FOLDER:-gin}/main.go
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./:/app
