@@ -2,11 +2,15 @@ package swagno
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"reflect"
+	"strconv"
 	"strings"
 )
+
+var ErrIgnoreJSONField = errors.New("ignore json field")
 
 // GenerateDocs Generate swagger v2 documentation as json string
 func (s Swagger) GenerateDocs() (jsonDocs []byte) {
@@ -16,7 +20,7 @@ func (s Swagger) GenerateDocs() (jsonDocs []byte) {
 	}
 
 	// generate definition object of s json: https://swagger.io/specification/v2/#definitions-object
-	generateSwaggerDefinition(&s, endpoints)
+	s.generateSwaggerDefinition(endpoints)
 
 	// convert all user EndPoint models to 'path' fields of s json
 	// https://swagger.io/specification/v2/#paths-object
@@ -135,26 +139,32 @@ func buildSwaggerResponses(list []Response) map[string]swaggerResponse {
 }
 
 // generate "definitions" keys from endpoints: https://swagger.io/specification/v2/#definitions-object
-func generateSwaggerDefinition(swagger *Swagger, endpoints []Endpoint) {
+func (s *Swagger) generateSwaggerDefinition(endpoints []Endpoint) {
 	// create all definations for each model used in endpoint
-	(*swagger).Definitions = make(map[string]swaggerDefinition)
+	s.Definitions = make(map[string]swaggerDefinition)
 	for _, endpoint := range endpoints {
 		if endpoint.Body != nil {
-			createDefinition(swagger, endpoint.Body)
+			s.createDefinition(fmt.Sprintf("%T", endpoint.Body), endpoint.Body)
 		}
 		for _, response := range endpoint.Responses {
-			createDefinition(swagger, response.Body)
+			s.createDefinition(fmt.Sprintf("%T", response.Body), response.Body)
 		}
 	}
 }
 
 // generate "definitions" attribute for swagger json
-func createDefinition(swagger *Swagger, t interface{}) {
-	reflectReturn := reflect.TypeOf(t)
+func (s *Swagger) createDefinition(definition string, obj interface{}) {
+	reflectReturn := reflect.TypeOf(obj)
 	if reflectReturn.Kind() == reflect.Slice {
 		reflectReturn = reflectReturn.Elem()
 	}
-	properties := make(map[string]swaggerDefinitionProperties)
+
+	if _, ok := s.Definitions[definition]; !ok {
+		s.Definitions[definition] = swaggerDefinition{
+			Type:       "object",
+			Properties: make(map[string]swaggerDefinitionProperties),
+		}
+	}
 	for i := 0; i < reflectReturn.NumField(); i++ {
 		field := reflectReturn.Field(i)
 		fieldType := getType(field.Type.Kind().String())
@@ -164,83 +174,174 @@ func createDefinition(swagger *Swagger, t interface{}) {
 			continue
 		}
 
+		fieldName, err := getJsonTag(field)
+		if err != nil {
+			continue
+		}
+
 		// if item type is array, create defination for array element type
 		if fieldType == "array" {
 			if field.Type.Elem().Kind() == reflect.Struct {
-				properties[getJsonTag(field)] = swaggerDefinitionProperties{
+				definitionName := field.Type.Elem().String()
+				s.Definitions[definition].Properties[fieldName] = swaggerDefinitionProperties{
 					Type: fieldType,
 					Items: &swaggerDefinitionPropertiesItems{
-						Ref: fmt.Sprintf("#/definitions/%s", field.Type.Elem().String()),
+						Ref: fmt.Sprintf("#/definitions/%s", definitionName),
 					},
 				}
-				createDefinition(swagger, reflect.New(field.Type.Elem()).Elem().Interface())
+
+				if _, ok := s.Definitions[definitionName]; !ok {
+					definitionObj := reflect.New(field.Type.Elem()).Elem().Interface()
+					s.createDefinition(fmt.Sprintf("%T", definitionObj), definitionObj)
+				}
 			} else {
-				properties[getJsonTag(field)] = swaggerDefinitionProperties{
+				s.Definitions[definition].Properties[fieldName] = swaggerDefinitionProperties{
 					Type: fieldType,
 					Items: &swaggerDefinitionPropertiesItems{
-						Type: getType(field.Type.Elem().Kind().String()),
+						Type:    getType(field.Type.Elem().Kind().String()),
+						Example: getExampleValue(field),
 					},
 				}
 			}
 		} else {
 			if field.Type.Kind() == reflect.Struct {
 				if field.Type.String() == "time.Time" {
-					properties[getJsonTag(field)] = swaggerDefinitionProperties{
-						Type:   "string",
-						Format: "date-time",
+					s.Definitions[definition].Properties[fieldName] = swaggerDefinitionProperties{
+						Type:    "string",
+						Format:  "date-time",
+						Example: getExampleValue(field),
 					}
 				} else if field.Type.String() == "time.Duration" {
-					properties[getJsonTag(field)] = swaggerDefinitionProperties{
-						Type: "integer",
+					s.Definitions[definition].Properties[fieldName] = swaggerDefinitionProperties{
+						Type:    "integer",
+						Example: getExampleValue(field),
 					}
 				} else {
-					properties[getJsonTag(field)] = swaggerDefinitionProperties{
-						Ref: fmt.Sprintf("#/definitions/%s", field.Type.String()),
+					jsonTag := field.Tag.Get("json")
+					if jsonTag == "" {
+						s.createDefinition(fmt.Sprintf("%T", obj), reflect.New(field.Type).Elem().Interface())
+					} else {
+						definitionName := field.Type.String()
+						s.Definitions[definition].Properties[fieldName] = swaggerDefinitionProperties{
+							Ref: fmt.Sprintf("#/definitions/%s", definitionName),
+						}
+
+						if _, ok := s.Definitions[definitionName]; !ok {
+							definitionObj := reflect.New(field.Type).Elem().Interface()
+							s.createDefinition(fmt.Sprintf("%T", definitionObj), definitionObj)
+						}
 					}
-					createDefinition(swagger, reflect.New(field.Type).Elem().Interface())
+
 				}
 			} else if field.Type.Kind() == reflect.Pointer {
 				if field.Type.Elem().Kind() == reflect.Struct {
 					if field.Type.Elem().String() == "time.Time" {
-						properties[getJsonTag(field)] = swaggerDefinitionProperties{
-							Type:   "string",
-							Format: "date-time",
+						s.Definitions[definition].Properties[fieldName] = swaggerDefinitionProperties{
+							Type:    "string",
+							Format:  "date-time",
+							Example: getExampleValue(field),
 						}
 					} else if field.Type.String() == "time.Duration" {
-						properties[getJsonTag(field)] = swaggerDefinitionProperties{
-							Type: "integer",
+						s.Definitions[definition].Properties[fieldName] = swaggerDefinitionProperties{
+							Type:    "integer",
+							Example: getExampleValue(field),
 						}
 					} else {
-						properties[getJsonTag(field)] = swaggerDefinitionProperties{
-							Ref: fmt.Sprintf("#/definitions/%s", field.Type.Elem().String()),
+						definitionName := field.Type.Elem().String()
+						s.Definitions[definition].Properties[fieldName] = swaggerDefinitionProperties{
+							Ref: fmt.Sprintf("#/definitions/%s", definitionName),
 						}
-						createDefinition(swagger, reflect.New(field.Type.Elem()).Elem().Interface())
+
+						if _, ok := s.Definitions[definitionName]; !ok {
+							definitionObj := reflect.New(field.Type.Elem()).Elem().Interface()
+							s.createDefinition(fmt.Sprintf("%T", definitionObj), definitionObj)
+						}
 					}
 				} else {
-					properties[getJsonTag(field)] = swaggerDefinitionProperties{
-						Type: getType(field.Type.Elem().Kind().String()),
+					s.Definitions[definition].Properties[fieldName] = swaggerDefinitionProperties{
+						Type:    getType(field.Type.Elem().Kind().String()),
+						Example: getExampleValue(field),
 					}
 				}
 			} else {
-				properties[getJsonTag(field)] = swaggerDefinitionProperties{
-					Type: fieldType,
+				s.Definitions[definition].Properties[fieldName] = swaggerDefinitionProperties{
+					Type:    fieldType,
+					Example: getExampleValue(field),
 				}
 			}
 		}
 	}
-	(*swagger).Definitions[fmt.Sprintf("%T", t)] = swaggerDefinition{
-		Type:       "object",
-		Properties: properties,
-	}
 }
 
 // get struct json tag as string of a struct field
-func getJsonTag(field reflect.StructField) string {
+func getJsonTag(field reflect.StructField) (string, error) {
 	jsonTag := field.Tag.Get("json")
-	if strings.Index(jsonTag, ",") > 0 {
-		return strings.Split(jsonTag, ",")[0]
+	jsonOptions := strings.Split(jsonTag, ",")
+
+	if len(jsonOptions) > 0 {
+		if jsonOptions[0] == "-" {
+			return "", ErrIgnoreJSONField
+		} else if jsonOptions[0] == "" {
+			return field.Name, nil
+		}
+
+		return jsonOptions[0], nil
 	}
-	return jsonTag
+
+	return field.Name, nil
+}
+
+func getEmptyExampleValue(fieldType string) interface{} {
+	switch fieldType {
+	case "integer":
+		return 0
+	case "boolean":
+		return false
+	case "number":
+		return 0.0
+	case "struct":
+		return nil
+	}
+
+	return fieldType
+}
+
+// get example tag as string example value
+func getExampleValue(field reflect.StructField) interface{} {
+	example := field.Tag.Get("example")
+	fieldType := getType(field.Type.Kind().String())
+	if example == "" {
+		switch fieldType {
+		case "ptr":
+			return getEmptyExampleValue(getType(field.Type.Elem().Kind().String()))
+		default:
+			return getEmptyExampleValue(fieldType)
+		}
+	}
+
+	switch fieldType {
+	case "integer":
+		number, err := strconv.Atoi(example)
+		if err != nil {
+			return 0
+		}
+		return number
+	case "boolean":
+		if example == "true" {
+			return true
+		}
+
+		return false
+	case "number":
+		number, err := strconv.ParseFloat(example, 64)
+		if err != nil {
+			return 0.0
+		}
+
+		return number
+	}
+
+	return example
 }
 
 // get swagger type from reflection type
