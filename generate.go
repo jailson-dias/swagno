@@ -160,7 +160,9 @@ func (s *Swagger) createDefinition(definition string, obj interface{}) {
 	}
 
 	if _, ok := s.Definitions[definition]; !ok {
-		s.Definitions[definition] = swaggerDefinition{}
+		s.Definitions[definition] = swaggerDefinition{
+			Properties: map[string]swaggerDefinitionProperties{},
+		}
 	}
 
 	properties := make(map[string]swaggerDefinitionProperties)
@@ -283,10 +285,15 @@ func (s *Swagger) createDefinition(definition string, obj interface{}) {
 		}
 	}
 
+	mergedProperties := s.Definitions[definition].Properties
+	for key, value := range properties {
+		mergedProperties[key] = value
+	}
+
 	s.Definitions[definition] = swaggerDefinition{
 		Type:       "object",
-		Properties: properties,
-		Required:   requireds,
+		Properties: mergedProperties,
+		Required:   append(s.Definitions[definition].Required, requireds...),
 	}
 }
 
