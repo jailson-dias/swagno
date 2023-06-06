@@ -160,11 +160,11 @@ func (s *Swagger) createDefinition(definition string, obj interface{}) {
 	}
 
 	if _, ok := s.Definitions[definition]; !ok {
-		s.Definitions[definition] = swaggerDefinition{
-			Type:       "object",
-			Properties: make(map[string]swaggerDefinitionProperties),
-		}
+		s.Definitions[definition] = swaggerDefinition{}
 	}
+
+	properties := make(map[string]swaggerDefinitionProperties)
+	var requireds []string
 	for i := 0; i < reflectReturn.NumField(); i++ {
 		field := reflectReturn.Field(i)
 		fieldType := getType(field.Type.Kind().String())
@@ -179,11 +179,15 @@ func (s *Swagger) createDefinition(definition string, obj interface{}) {
 			continue
 		}
 
+		if isRequired(field) {
+			requireds = append(requireds, fieldName)
+		}
+
 		// if item type is array, create defination for array element type
 		if fieldType == "array" {
 			if field.Type.Elem().Kind() == reflect.Struct {
 				definitionName := field.Type.Elem().String()
-				s.Definitions[definition].Properties[fieldName] = swaggerDefinitionProperties{
+				properties[fieldName] = swaggerDefinitionProperties{
 					Type: fieldType,
 					Items: &swaggerDefinitionPropertiesItems{
 						Ref: fmt.Sprintf("#/definitions/%s", definitionName),
@@ -195,26 +199,29 @@ func (s *Swagger) createDefinition(definition string, obj interface{}) {
 					s.createDefinition(fmt.Sprintf("%T", definitionObj), definitionObj)
 				}
 			} else {
-				s.Definitions[definition].Properties[fieldName] = swaggerDefinitionProperties{
+				properties[fieldName] = swaggerDefinitionProperties{
 					Type: fieldType,
 					Items: &swaggerDefinitionPropertiesItems{
 						Type:    getType(field.Type.Elem().Kind().String()),
 						Example: getExampleValue(field),
+						Enum:    getEnumOptions(field),
 					},
 				}
 			}
 		} else {
 			if field.Type.Kind() == reflect.Struct {
 				if field.Type.String() == "time.Time" {
-					s.Definitions[definition].Properties[fieldName] = swaggerDefinitionProperties{
+					properties[fieldName] = swaggerDefinitionProperties{
 						Type:    "string",
 						Format:  "date-time",
 						Example: getExampleValue(field),
+						Enum:    getEnumOptions(field),
 					}
 				} else if field.Type.String() == "time.Duration" {
-					s.Definitions[definition].Properties[fieldName] = swaggerDefinitionProperties{
+					properties[fieldName] = swaggerDefinitionProperties{
 						Type:    "integer",
 						Example: getExampleValue(field),
+						Enum:    getEnumOptions(field),
 					}
 				} else {
 					jsonTag := field.Tag.Get("json")
@@ -222,7 +229,7 @@ func (s *Swagger) createDefinition(definition string, obj interface{}) {
 						s.createDefinition(fmt.Sprintf("%T", obj), reflect.New(field.Type).Elem().Interface())
 					} else {
 						definitionName := field.Type.String()
-						s.Definitions[definition].Properties[fieldName] = swaggerDefinitionProperties{
+						properties[fieldName] = swaggerDefinitionProperties{
 							Ref: fmt.Sprintf("#/definitions/%s", definitionName),
 						}
 
@@ -236,19 +243,21 @@ func (s *Swagger) createDefinition(definition string, obj interface{}) {
 			} else if field.Type.Kind() == reflect.Pointer {
 				if field.Type.Elem().Kind() == reflect.Struct {
 					if field.Type.Elem().String() == "time.Time" {
-						s.Definitions[definition].Properties[fieldName] = swaggerDefinitionProperties{
+						properties[fieldName] = swaggerDefinitionProperties{
 							Type:    "string",
 							Format:  "date-time",
 							Example: getExampleValue(field),
+							Enum:    getEnumOptions(field),
 						}
 					} else if field.Type.String() == "time.Duration" {
-						s.Definitions[definition].Properties[fieldName] = swaggerDefinitionProperties{
+						properties[fieldName] = swaggerDefinitionProperties{
 							Type:    "integer",
 							Example: getExampleValue(field),
+							Enum:    getEnumOptions(field),
 						}
 					} else {
 						definitionName := field.Type.Elem().String()
-						s.Definitions[definition].Properties[fieldName] = swaggerDefinitionProperties{
+						properties[fieldName] = swaggerDefinitionProperties{
 							Ref: fmt.Sprintf("#/definitions/%s", definitionName),
 						}
 
@@ -258,18 +267,26 @@ func (s *Swagger) createDefinition(definition string, obj interface{}) {
 						}
 					}
 				} else {
-					s.Definitions[definition].Properties[fieldName] = swaggerDefinitionProperties{
+					properties[fieldName] = swaggerDefinitionProperties{
 						Type:    getType(field.Type.Elem().Kind().String()),
 						Example: getExampleValue(field),
+						Enum:    getEnumOptions(field),
 					}
 				}
 			} else {
-				s.Definitions[definition].Properties[fieldName] = swaggerDefinitionProperties{
+				properties[fieldName] = swaggerDefinitionProperties{
 					Type:    fieldType,
 					Example: getExampleValue(field),
+					Enum:    getEnumOptions(field),
 				}
 			}
 		}
+	}
+
+	s.Definitions[definition] = swaggerDefinition{
+		Type:       "object",
+		Properties: properties,
+		Required:   requireds,
 	}
 }
 
@@ -291,6 +308,7 @@ func getJsonTag(field reflect.StructField) (string, error) {
 	return field.Name, nil
 }
 
+// get deafault example value by field type
 func getEmptyExampleValue(fieldType string) interface{} {
 	switch fieldType {
 	case "integer":
@@ -306,7 +324,33 @@ func getEmptyExampleValue(fieldType string) interface{} {
 	return fieldType
 }
 
-// get example tag as string example value
+func getValueByFieldType(fieldType string, value string) interface{} {
+	switch fieldType {
+	case "integer":
+		number, err := strconv.Atoi(value)
+		if err != nil {
+			return 0
+		}
+		return number
+	case "boolean":
+		if value == "true" {
+			return true
+		}
+
+		return false
+	case "number":
+		number, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return 0.0
+		}
+
+		return number
+	}
+
+	return value
+}
+
+// get example value from struct tag
 func getExampleValue(field reflect.StructField) interface{} {
 	example := field.Tag.Get("example")
 	fieldType := getType(field.Type.Kind().String())
@@ -319,29 +363,7 @@ func getExampleValue(field reflect.StructField) interface{} {
 		}
 	}
 
-	switch fieldType {
-	case "integer":
-		number, err := strconv.Atoi(example)
-		if err != nil {
-			return 0
-		}
-		return number
-	case "boolean":
-		if example == "true" {
-			return true
-		}
-
-		return false
-	case "number":
-		number, err := strconv.ParseFloat(example, 64)
-		if err != nil {
-			return 0.0
-		}
-
-		return number
-	}
-
-	return example
+	return getValueByFieldType(fieldType, example)
 }
 
 // get swagger type from reflection type
@@ -357,4 +379,26 @@ func getType(t string) string {
 		return "number"
 	}
 	return t
+}
+
+// get enum options from struct tag
+func getEnumOptions(field reflect.StructField) interface{} {
+	enumOptionsStr := strings.Split(field.Tag.Get("enum"), "|")
+
+	if len(enumOptionsStr) == 0 || (len(enumOptionsStr) == 1 && enumOptionsStr[0] == "") {
+		return nil
+	}
+
+	enumOptions := make([]interface{}, len(enumOptionsStr))
+	for i, option := range enumOptionsStr {
+		value := getValueByFieldType(getType(field.Type.Kind().String()), option)
+		enumOptions[i] = value
+	}
+
+	return enumOptions
+}
+
+// get if a field is required from struct tag
+func isRequired(field reflect.StructField) bool {
+	return strings.Contains(strings.ToLower(field.Tag.Get("binding")), "required")
 }
